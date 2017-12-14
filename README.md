@@ -668,3 +668,532 @@ select语句的动态sql
 --练习
 	1）使用table类型变量接受s_dept表中id为31,42,50的部门信息并输出
 	2）使用动态sql更新testsql表中的数据，指定id的name.
+
+
+1.游标cursor
+  概念
+	游标是映射在结果集中一行数据上的位置指针或实体这阵有了游标，用户就可以访问结果集中任何一行数据。把游标放到某行
+
+数据后，就可以对该行数据进行操作，比如提取这行数据。
+  作用
+	处理多行结果集
+  游标的使用步骤
+      声明游标
+	在声明区声明游标
+	声明游标名以及对应的select语句
+	select语句并没有执行（没有产生查询结果），只是把声明信息保存在相应的数据字典中。
+	声明游标后，可以使用 游标名%rowtype 声明变量
+	--语法
+	cursor 游标名 is select 语句；
+      打开游标
+	执行在声明游标时 指定的select语句，把查询结果集保存在游标对应的工作区，同时游标指向工作区的首部、
+	--语法
+	open 游标名  //游标一旦打开，无法再次打开，除非先关闭。
+      提取数据
+	从定义游标的工作区检索一条数据放入指定的变量中。
+	每提取一条数据，游标自动向下移动一行（指向下一行数据）
+	游标指针只能单向的向下移动，不能返回。
+	--语法
+	fetch 游标名 into 变量 //用游标名%rowtype
+      关闭游标
+	当提取和处理完游标结果集的数据后，应该及时关闭游标，以释放占用的系统资源。
+	关闭游标后，游标所对应的工作区变为无效，不能在用fetch语句提取其中数据。
+	关闭的游标可以再次用open语句打开
+	--语法
+	close 游标名；
+  使用游标操作s_mep中的全部数据
+	declare
+	--声明游标
+	    cursor emp_cursor is select * from s_emp;
+	--声明变量
+	    var_emp emp_cursor%rowtype;
+	begin
+	--打开游标
+	    open emp_cursor;
+	--提取数据
+	    fetch emp_cursor into var_emp;
+	    dbms_output.put_line(var_emp.id||'.'||var_emp.first_name||'.'||var_emp.salary);
+	    fetch emp_cursor into var_emp;
+	    dbms_output.put_line(var_emp.id||'.'||var_emp.first_name||'.'||var_emp.salary);
+	    fetch emp_cursor into var_emp;
+	    dbms_output.put_line(var_emp.id||'.'||var_emp.first_name||'.'||var_emp.salary);	
+	--关闭游标
+	    close emp_cursor;
+	end;
+	/
+1.Carmen.2500
+2.LaDoris.1450
+3.Midori.1400
+PL/SQL procedure successfully completed.
+
+  游标的属性
+	游标名%属性
+	found      在提取数据时，如果提取到了数据，返回真（true）；否则返回假（false）；
+			     如果没有提取数据，则值为空（NULL）; //fetch 之前为空
+			     如果没有打开游标，会产生非法游标异常。//open 之前为非法
+	notfound   与found相反。
+	isopen     游标是否处于打开状态。//游标打开返回真，游标关闭返回假。 游标的打开与关闭没有重复性
+	rowcound   游标偏移量//游标没有打开则，出现非法异常。
+
+  使用简单循环 配合notfound属性遍历游标
+	declare
+	  cursor emp_cursor is select * from s_emp;
+	  var_emp emp_cursor%rowtype;
+	begin
+	  open emp_cursor;
+		loop
+	  	  fetch emp_cursor into var_emp;
+		  exit when emp_cursor%notfound;
+	  	  dbms_output.put_line(var_emp.id||','||var_emp.first_name||','||var_emp.salary);
+		end loop;
+	  close emp_cursor;
+	end;
+	/
+  使用while循环 配合found
+？？？？declare
+！！！！  cursor empcur is select * from s_emp;
+	  var_cur empcur%rowtype;
+	begin
+	  open empcur;
+	  fetch empcur into var_cur;
+	while empcur%found loop //此处empcur不能用var_cur;
+	    dbms_output.put_line(var_cur.id||' , '||var_cur.first_name||' , '||var_cur.salary);
+	    fetch empcur into var_cur;
+	end loop;
+	  close empcur;
+	end;
+	/
+  使用for可以自动打开游标、提取数据、关闭游标
+	declare
+	  cursor empcur is select * from s_emp;
+	  --var_cur empcur%rowtpye;//不用声明
+	begin
+	  for var_cur in empcur loop
+	    dbms_output.put_line(var_cur.id||' , '||var_cur.first_name||' , '||var_cur.salary);
+	  end loop;
+	end;
+	/
+  带参游标
+      参数的数据类型不能有任何长度、精度等修饰，但是可以使用%type
+      打开游标是传参
+      cursor 游标名（形参列表） is select 语句;
+      ...
+      open 游标名（实参列表）;
+
+	declare
+	  cursor empcur(var_id number) is select * from s_emp where id > var_id;
+	  --var_cur empcur%rowtpye;//不用声明
+	begin
+	  for var_cur in empcur(10) loop
+	    dbms_output.put_line(var_cur.id||' , '||var_cur.first_name||' , '||var_cur.salary);
+	  end loop;
+	end;
+	/
+
+  参考游标//动态查询语句返回多行 需要用到动态sql加游标
+	sqlstr := 'select * from s_emp';
+	使用参考游标步骤
+	1）定义一个参考游标数据类型
+	type 参考游标类型 is ref cursor;
+	2)声明参考游标类型变量（声明游标）
+	变量名 参考游标类型；
+	3）把游标变量与动态SQL结合（打开游标）
+	open 游标名（变量名） for sqlstr;
+	4)提取数据
+	fetch 游标名 into 变量；
+	5）关闭游标；0
+	close 游标名；
+
+？？？？declare
+	--声明参考游标定义
+	  tpye mycursor is ref cursor;
+	--声明参考游标类型变量
+	  var_empcur mycursor;
+	--声明变量 接受每行结果
+	  var_emp s_emp%rowtype;
+	--声明变量 保存动态SQL语句
+	   sqlstr varchar2(100);
+	begin
+	  sqlstr := 'select * from s_emp';
+	--打开游标 把动态sql语句和参考游标关联
+	  open empcur for sqlstr;
+	--提取数据
+	  loop
+	    fetch empcur into var_emp;
+	    exit when empcur%not found;
+	    dbms_output.put_line(var_cur.id||' , '||var_cur.first_name||' , '||var_cur.salary);
+	  end loop;
+	--关闭游标
+	    close empcur;
+	end;
+	/
+
+
+PLSQL中的异常
+  系统预定于异常
+  Oracle系统为用户提供的，可以在plsql中使用的预定义异常，以便检查用户代码失败的一般原因。
+  系统预定义异常有系统定义和引发，用户只需要根据异常的名字捕获和处理。
+  exception
+	when 异常名 then 
+	异常处理
+  ...
+zero_divide		除数为零
+	
+  案列
+	declare
+	  var_id number := 100;
+	  var_name varchar2(25);
+	begin
+	  select first_name into var_name from s_emp where id < var_id;
+	  dbms_output.put_line(var_name);
+	exception 
+	  when  no_data_found  then 
+	    dbms_output.put_line('no emp');
+	  when others then
+	    --dbms_output.put_line('Others');
+	    dbms_output.put_line(sqlcode||'...........'||sqlerrm);
+	end;
+	/
+
+
+  常用异常：
+	cursor_already_open
+	invalid_cursor
+	invalid_number		不能讲字符串准环卫字符串成数字
+	no_date_found		select ..into 结果集为空
+	to_many_rows		结果集操作一行
+ 自定义异常
+	步骤：
+	1）定义异常
+	异常名 exception；
+	2）更具条件引发异常
+	if 引发条件 then 
+	    raise 异常名；
+	end if;
+	3）捕获
+	4）处理
+	
+  案列：更新执行编号的员工信息，员工不存在时提示异常
+	emp_new_1为例
+
+	declare
+	  no_emp exception;
+	  var_id number := 100;
+	begin
+	  update emp_new_1 set salary = 9999 where id = var_id;
+	  if sql%notfound then 
+	    raise no_emp;
+	  end if;	  
+	  commit;
+	exception 
+	  when no_emp then 
+	    dbms_output.put_line('no emp');
+	end;
+	/
+隐式游标：在执行一个sql语句时，Oracle会自动创建一个隐式游标。这个游标是内存中处理该条语句的工作区。
+  隐式游标主要是处理dml语句的结果,当然特殊情况下也可以处理select语句。
+  由于隐式游标也有属性，使用属性是，需要游标的名字，所以Oracle提供了隐式游标的名字--sql.
+  
+存储过程 procedure
+  匿名块  有名块
+  匿名块： 匿名块不保存在数据中，每次使用都需要进行编译，不能再其他块中调用
+  有名块： 可以存储在数据库中，并且可以在任何需要的地方调用
+	存储过程（procedure） 函数（function） 包（package） 触发器(trigger)
+
+创建存储过程的语法
+
+	create [or replace] procedure[(参数列表)]
+	  {as|is}
+		--临时变量
+	begin
+	exception
+	end;
+	/
+  无参的存储过程
+  案列： 创建一个无参存储过程，输出两个书中的较大值。
+	--创建
+	create or replace procedure getmax_1
+	is
+	  var_x number;
+	  var_y number;
+	begin
+	  var_x := 10;
+	  var_y := 200;
+	if var_x > var_y then
+	  dbms_output.put_line(var_x);
+	else
+	  dbms_output.put_line(var_y);
+	end if;
+	end;
+	/
+  如果创建的过程存在编译错误，默认只有警告，没有具体的错误信息，查看错误信息，可以使用命令：show errors
+  调用
+	begin
+	  getmax;
+	end;
+	/
+  查看存储过程：user_source
+  select text from user_source where name = 'GETMAX'; <----名字//查看存储过程
+
+  带参的存储过程
+    注意事项
+	1）参数的数据类型不能带有长度或精度的修饰
+	2）参数的语法：
+		参数名{[in]|out|in out} 数据类型 {:= 值|default 值}
+		参数的模式：
+		  in  		 输入参数 负责向过程传入数据 默认方式  //实参要求是值，或初始化的变量
+		  out 		 输出参数 负责从过程传出数据  //实参必须是变量，不需要初始化
+		  in  out 	 输入输出参数 既负责传入数据，有负责传出数据 //必须是初始化的变量
+	默认值：
+		模式是in 的才可以默认值
+  创建带参的存储过程
+	create or replace procedure getmax_1(
+	  var_x in number, var_y number := 100)
+	is
+	begin
+	  if var_x > var_y then
+	    dbms_output.put_line(var_x);
+	  else 
+	    dbms_output.put_line(var_y);
+	end if;
+	end;
+	/
+  参数赋值方式
+	declare
+	  var_a number := 100;
+	  var_b number := 300;
+	begin
+	  getmax_1(var_a, var_b);
+	  getmax_1(3,100);
+	  getmax_1(203);
+	end;
+	/
+  按照名字赋值
+	参数名=>值
+	declare
+	  var_a number := 100;
+	  var_b number := 300;
+	begin
+	  getmax_1(var_a, var_b);
+	  getmax_1(3,100);
+	  getmax_1(var_x=>10, var_y=>20);
+	end;
+	/
+
+  --练习 ：创建一个存储过程，输出两个较大值，同时把数字之和存到第二个参数
+？？？？create or replace procedure max(
+	  var_x in number := 1, var_y in out number:= 2)
+	is
+	begin
+	  if var_x > var_y then
+	    dbms_output.put_line(var_x);
+	    
+	    dbms_output.put_line(var_z);
+	  else 
+	    dbms_output.put_line(var_y);
+	    
+	    dbms_output.put_line(var_z);
+	end if;
+	end;
+	/ 
+  函数 function	
+	函数和存储过过程的区别
+	1）关键字不同 函数是function，存储过程是procedure
+	2) 存储过程没有返回类型和返回值，函数有
+	3）调用方式不同：
+	存储过程在plsql中是直接调用
+	函数在plsql中调用时要组成表达式调用
+	  a.变量:=函数（参数）
+	  b.把函数的调用作为其他的函数存储过程的参数
+  语法
+	create[or replace] function 函数名[（参数列表）]
+	    return 返回值的数据类型
+	{is|as}
+	  -- 临时变量
+	begin
+	  -- 必须有return语句
+	exception
+	end;
+	/
+
+  案列：
+	create or replace function getmin_1(
+	  var_x number, var_y number) return number
+	is
+	begin
+	  if var_x > var_y then
+	    dbms_output.put_line(var_y);
+	    return var_x;
+	  else
+	    dbms_output.put_line(var_x);
+	    return var_x;
+	  end if;
+	end;
+	/
+
+	declare
+	  var_min number;
+	begin
+	  var_min := getmin_1(12,123);
+	end;
+	/
+  练习：创建一个函数，返回两个数的较小值，同时把两个之和存到第二个参数。
+	
+	create or replace function getmin_1(
+	  var_x in out number , var_y in out number ) return number
+	is 
+	begin
+	  if var_x > var_y then
+	    var_x := var_x + var_y;
+	    dbms_output.put_line('Total:='||var_x);
+	    return var_y;
+	  else 
+	    var_y := var_x + var_y;
+	    dbms_output.put_line('Total:='||var_y);
+	    return var_x;
+	  end if;
+	end;
+	/
+
+	declare
+	  var_min number;
+	  var_a number := 12;
+	  var_b number := 14;
+	begin
+	  var_min := getmin_1(var_a,var_b);
+	  dbms_output.put_line('Min:='||var_min);
+
+	  var_min := getmin_1(12,23); //expression '12' cannot be used as an assignment target
+	  dbms_output.put_line('Min:='||var_min);
+	end;
+	/
+
+  包 package
+  概念
+	把一组逻辑上相关的函数、过程、类型、变量等组织到一起的一种逻辑结构
+  系统提供的包
+？？？？dbms_output ： 输出包
+	dbms_random :  产生随机数
+
+  自定义包
+    步骤
+	1）定义一个头部 类似于C语言中.h文件
+	create [or replace] package 报名
+	is
+	-- 声明函数、过程、定义类型、声明变量。
+	end [报名];
+
+	2) 定义一个包的主体 类似C语言中.c文件
+	create [or replace] package body 包名
+	is 
+	--实现函数、过程等
+	end [包名];
+
+  创建包的头部
+	create or replace package PKG
+	is
+	--声明过程
+	procedure getmax(x number, y number);
+	--声明函数
+	function getmin (x number, y number) return number;
+	end;
+	/
+
+  创建包的主体
+	create or replace package body PKG
+	is
+	  procedure getmax(x number, y number)
+	  is 
+	  begin
+		if x > y then
+		  dbms_output.put_line(x);
+		else
+		  dbms_output.put_line(y);
+	 	end if;
+	  end;
+？？？？  function getmin(x number, y number)
+	  is
+	  begin
+		if x > y then 
+		  return y;
+		else
+		  return x;
+		end if;
+	  end;
+	end;
+	/
+
+  使用包中数据
+	declare
+	  var_a number := 1;
+	  var_b number := 2;
+	  var_c number;
+	begin
+	PKG.getmax(var_a, var_b);
+	var_c := PKG.getmix(var_a, var_b);
+	dbms_output.put_line(var_c);
+	end;
+	/
+
+触发器 trigger
+  概念
+	触发器可以看成是一种的特殊的存储过程，他定义了一些和数据库相关事件。（insert delete update create等）发生时应
+
+该执行的功能代码块。通常用于去管理一些复杂性约束、监控对表达修改。通过其他的程序，实现对数据的审计功能。
+  语法 DML触发器
+	create [or replace] trigger 触发器名
+	{befor|after} {insert|update|delete}
+	on 表名[for each row]
+	declare
+	begin
+	exception
+	end;
+	/
+
+  语句及触发器
+	以emp_new_1为例创建一个触发器，监控对表的更新
+	create trigger update_emp_new_1
+	after update on emp_new_1
+	declare
+	begin
+	dbms_output.put_line('table update');
+	end;
+	/
+	
+	update emp_new_1 set salary = salary + 50 where id = 1;
+	
+  行级触发器
+	create trigger update_emp_new_3
+	after update on emp_new_1 for each row
+	declare
+	begin
+	--dbms_output.put_line('table update');
+	dbms_output.put_line('old:'||:old.id||','||:old.salary);
+	dbms_output.put_line('new:'||:new.id||','||:new.salary);
+	end;
+	/
+	update emp_new_1 set salary = salary + 50 where id > 1;
+	列标识符
+	    原值标识符 := old 更新前的数据行的值
+	    新值标识符 := new 更新后的数据行的值
+	类型： 表名%rowtype类型
+
+  使用触发器产生主键的值：
+	--创建表
+	create table trigger_4(id number primary key, name varchar(25));
+	--创建序列
+	create sequence trigger_4_s;	
+	--创建触发器
+	create trigger trigger_insert
+	before insert on trigger_4 for each row
+	begin
+	  select trigger_4_s.nextval into :new.id from dual;
+	  dbms_output.put_line(:new.id);
+	end;
+	/
+	--插入语句
+？？？？	insert into trigger_4 values('Ben');
+	/
+
+---->练习
+	创建一个存储过程，传入一个大于1的整数，把1..n的累加和放入到第二个参数，并测试。
