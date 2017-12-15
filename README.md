@@ -668,3 +668,340 @@ select语句的动态sql
 --练习
 	1）使用table类型变量接受s_dept表中id为31,42,50的部门信息并输出
 	2）使用动态sql更新testsql表中的数据，指定id的name.
+
+1.什么是pro程序
+
+    1）概念
+	通过在过程化的编程语言中嵌入SQL语句而开发的应用成语，称为pro程序。
+	其中，过程化的变成语言称为宿主语言
+	嵌入的SQL语句称为嵌入式SQL、
+    2）proc/c++
+	在c/c++中嵌入SQL语句而开发的应用程序，称为proc/proc++程序
+	目的：使用c/c++这种高效的编程语言称为访问Oracle数据库工具
+
+2.proc中和数据库相关的语句
+	
+	#include <...>
+	... ...
+	/*包含一个教唆sqlca的结构*/
+	exec sql include sqlca;
+	
+	声明变量
+	声明函数
+
+	int main（）
+	{
+		/*链接数据库*/
+		exec sql connect：用户名/密码
+		/*查询操作*/
+		exec sql select 字段列表 into 变量列表 from 表名 where 条件；
+		/*断开链接*/
+		exec sql commit work release；
+		exec sql rollbanck work release;
+
+		return 0;
+	}
+3.c程序开发步骤
+    ... ...
+
+4.proc程序的开发步骤
+    1）编译源程序
+	vi xxx.pc
+    2）预编译 把.pc文件翻译成.c文件
+    	proc  xxx.c
+    3）编译、链接
+	gcc xxx.c -lclntsh      --linux
+	gcc xxx.x -lorasql10	--windows
+    4）执行
+	a.out
+  案例---first.pc     
+    
+5.宿主变量
+
+    概念 C语言是宿主语言，在宿主语言中定义，用于和数据库交互的变量称为宿主变量。
+    特点：变量可以在数据库与C语言中使用。
+    
+    宿主变量的数据类型
+	char 
+	short
+	int		整型
+	long 		
+	float
+	double		浮点
+	char arr[]	定长字符串
+	varchar arr[] //proc 中可以使用 为变长字符串
+    定长字符串，与变长字符串
+	定长字符串
+	    数据长度不足his，用空格补齐，‘\0’结尾
+    案例：second.pc
+#include <stdio.h>
+
+exec sql include sqlca;
+
+int main ()
+{
+	char password[30] = "system/open123";
+	varchar name[25];
+	exec sql connect: password;
+	exec sql select first_name into name from s_emp where id = 1;
+	exec sql commit work release;
+	printf("The name is : %s hello\n", name);
+	return 0;
+}
+proc secend.pc
+gcc secend.c -lclntsh
+./a.out
+
+解决：The name is : CarmenP�؎����� hello
+1） varchar  name[25] = {0};
+2)  name.arr[name.len] = '\0';
+解决后：The name is : Carmen hello
+
+    在预编译是，varchar 类型的数组会被翻译成同名的c语言的街结构体
+	struct{
+	  unsigned short len;
+	  unsigned cahr arr[25];
+		} name;
+    在C语言中使用时，需要按照结构体的使用方法使用，也就是说使用name.arr获取字符创值，
+
+只用name.len、获取字符创的长度。
+    在sql语句中，varchar类型和char类型的使用方式相同
+    在使用时varchar，可能产生乱码，解决方案：
+	a:数据初始化
+	  varchar name[25] = {0};
+	b:在字符串的下一个元素添加‘\0’
+ 	  name.arr[name.len] = '\0';
+3)使用proc的预编译选项
+    proc fitst.pc oname=xx.c/cpp
+    char_map=charz :把字符串处理成定长，不足的空格补齐，‘\0’结尾。
+	     =varchar2|charf :把字符串处理为定长，不足的一空格补齐，不一‘\0’结尾
+	     =string ：把字符串处理成变长，以‘\0’结尾
+	proc second.pc char_map=charz oname varchar.c
+
+4）宿主变量的使用注意事项
+    1.宿主变量在sql语句中使用时，最好前边加默冒号：宿主变量
+	int  id = 1;
+	exec sql select frist_name into name from s_emp where id=id (X:error);
+	exec sql select frist_name into :name from s_emp where id=:id (X:error);
+    2.DDL语句中不能只用宿主变量
+	案例：删除一张表 droptable.pc
+    3.宿主变量可以使用指针，但是不推荐使用
+    4.宿主变量的定义，强烈建议放入声明区
+	（C++语言、Windows平台 要求宿主变脸必须在声明区定义）
+	exec sql begin declare section;
+	exec sql end declare section;
+
+	exec sql begin declare section;
+		char userpasswd[] = "system/open123";
+		char name[25]; 
+	exec sql end declare section;
+
+6.指示变量
+    指示变量的概念及作用
+	当数据库中的字段值，赋值给宿主变量时，可以只用指示变量获取赋值状态。
+	指示变量的值：
+	    0		代表正常赋值
+	   -1		代表数据库中字段值为NULl
+	   >0		代表阶段赋值
+    指示变量的语法
+	指示变量的数据必须是short类型；
+	short indid;
+	short indname;
+	:宿主变量 [indicator] :指示变量
+	exec sql select id, first_name, id int :id:indid, :name:indname from s_emp 
+
+where id = 1;
+
+    ----案列：使用指示变量来指定id,first_name, manager_id的赋值状态
+	indvar.pc
+
+7.数组变量
+    数组变量使用的注意事项
+    1）除了字符类型以外，其他的数据类型的数组只能是一维的
+    int ids[50]
+    double sals[50]
+    char names[50][25]
+    2）不支持数组指针
+    3）数组最大元素32767
+    4）在select语句中使用数组变量时，只能使用数组名，不能使用下标
+    5）如果需要是你要哪个多个变量的赋值状态，可以使用指示变量数组
+    
+    把s_emp表中所有员工id,first_name查询出来，使用相应的数组接收查询结果，并输出
+
+8.sqlca通信区
+    通信区
+	为了取得每个sql语句之心后的相关状态说明，以便进行错误的后续操作以及跟踪。
+	Oracle中有两个通信区：
+	  sql通信区	：sqlca
+	  Oracle 通信区 ：oraca
+	sqlca通信区
+	  sqlca是Oracle和应用程序的一个接口，主要用于错误的诊断和时间处理。
+	  执行proc程序时，Oracle把每一个嵌入的sql状态信息存入sqlca中，主要包括错误代码
+
+、警告标志设置、诊断文本、影响的行数等。
+	  sqlca本质上是c语言的一个结构体。程序中没执一条sql语句就会把sqlca中所有成员的
+
+值重新赋值一遍。所以需要好获取一条sql语句的执行结果的信息的话，需要立即获取，否则就会
+
+被下一条sql语句结果覆盖掉。
+	常用结构体成员：
+	  sqlca.sqlcode: sql与执行的状态
+			0  正常
+			>0 执行出错 一般是出现异常
+			<0 系统错误 比如数据库系统或网络错误
+	  sqlca.sqlerrm.sqlerrmc: sql出错的错误信息（字符串）
+
+	  sqlca.sqlerrd[2]: 保存sql语句影响的行数
+
+#include <stdio.h>
+exec sql include sqlca;
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "system/open123";
+		int ids[50] = {0};
+		char names[50][25] = {0};
+		short indmids[50] = {-2};
+	exec sql end declare section;
+	exec sql connect:pw;
+	if (sqlca.sqlcode)
+	{
+		printf("%s\n", sqlca.sqlerrm.sqlerrmc);
+		return -1;
+	}
+	exec sql select id,first_name into :ids:indmids,:names from s_emp;
+
+	exec sql commit work release;
+	int i = 0;
+	for (; i<sqlca.sqlerrd[2]; i++)
+		printf("ids:%d  names:%s indmid%hd\n", ids[i], names[i], indmids[i]);
+	return 0;
+}
+
+ubuntu@linux:~/桌面/Prc/proc_day01$ proc sqlca.pc 
+Pro*C/C++: Release 10.2.0.1.0 - Production on Fri Dec 15 14:45:40 2017
+Copyright (c) 1982, 2005, Oracle.  All rights reserved.
+System default option values taken from: /opt/ora10/precomp/admin/pcscfg.cfg
+ubuntu@linux:~/桌面/Prc/proc_day01$ gcc sqlca.c -lclntsh
+ubuntu@linux:~/桌面/Prc/proc_day01$ ./a.out --->>
+--->>ORA-01017: invalid username/password; logon denied
+
+#include <stdio.h>
+exec sql include sqlca;
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "system/open123";
+		int ids[50] = {0};
+		char names[50][25] = {0};
+		short indmids[50] = {-2};
+	exec sql end declare section;
+	exec sql connect:pw;
+	if (sqlca.sqlcode)
+	{
+		printf("%s\n", sqlca.sqlerrm.sqlerrmc);
+		return -1;
+	}
+	exec sql select id,first_name into :ids:indmids,:names from s_emp where id = 
+
+100;
+	if (sqlca.sqlcode)
+	{
+		printf("%s\n", sqlca.sqlerrm.sqlerrmc);
+		return -1;
+	}
+
+	exec sql commit work release;
+	int i = 0;
+	for (; i<sqlca.sqlerrd[2]; i++)
+		printf("ids:%d  names:%s indmid%hd\n", ids[i], names[i], indmids[i]);
+	return 0;
+}
+
+ubuntu@linux:~/桌面/Prc/proc_day01$ proc sqlca.pc 
+Pro*C/C++: Release 10.2.0.1.0 - Production on Fri Dec 15 14:48:50 2017
+Copyright (c) 1982, 2005, Oracle.  All rights reserved.
+System default option values taken from: /opt/ora10/precomp/admin/pcscfg.cfg
+ubuntu@linux:~/桌面/Prc/proc_day01$ gcc sqlca.c -lclntsh
+ubuntu@linux:~/桌面/Prc/proc_day01$ ./a.out --->>
+--->>ORA-01403: no data found
+
+    oraca通信区
+	一个类型与sqlca的数据结构，可以作为sqlca通信区的辅助，如果需要更加详细的状态信
+
+息，就可以时你也能oraca。
+	对sqlca的一个补充。
+	可以获取执行的sql语句的文本。
+	oraca的使用步骤：
+	1）包含oraca
+	exec sql include oraca;
+	2）打开oraca选项
+	exec oracle option(oraca=yes);
+	3）设置sql的保存标准
+	oraca.orastxtf (save text file)
+		0	不保存sql文本 默认值
+		1	sql语句出错时保存
+		2 	sql出现警告或错误时保存
+		3	始终保存
+	4）获取sql文本
+	oraca.orastxt.orastxtc
+
+	案例：oraca.pc
+#include <stdio.h>
+exec sql include sqlca;
+exec sql include oraca;
+exec oracle option(oraca=yes);
+int main ()
+{
+	exec sql begin declare section;
+		char userpasswd[] = "system/open123";
+		char name[25]; 
+		int id = 1;
+	exec sql end declare section;
+	exec sql connect: userpasswd;
+	oraca.orastxtf = 1;
+	exec sql select first_name into name from s_emp where id = :id;
+	exec sql commit work release;
+	printf("oraca.orastxt.orastxtc: %s\n", oraca.orastxt.orastxtc);
+	printf("Table s_emp first_name: %s\n", name);
+	return 0;
+}
+ubuntu@linux:~/桌面/Prc/proc_day01$ proc oraca.pc 
+Pro*C/C++: Release 10.2.0.1.0 - Production on Fri Dec 15 15:27:15 2017
+Copyright (c) 1982, 2005, Oracle.  All rights reserved.
+System default option values taken from: /opt/ora10/precomp/admin/pcscfg.cfg
+ubuntu@linux:~/桌面/Prc/proc_day01$ gcc oraca.c -lclntsh
+ubuntu@linux:~/桌面/Prc/proc_day01$ ./a.out 
+oraca.orastxt.orastxtc: 
+Table s_emp first_name: Carmen
+
+10.proc中如何使用sql语句
+
+    1）select语句
+	在语句前加exec sql，配合into 使用
+	exec sql select 字段列表 into 宿主变量（数组变量） from 表名 where 条件；
+    2） dml语句（insert、update、delete）
+	ddL语句（drop、create、alter）
+	tcl语句（commit、rollback、savepoint）
+	直接在语句前加exec sql
+	注意：ddl语句中不能使用宿主变量
+	
+	综合案例：迷你学生管理系统
+	实现功能
+	    1）创建学生信息表
+	    2）添加学生
+	    3）根据学号删除学生信息
+	    4）根据学号修改学生信息
+	    5）显示学生列表
+	    0.退出
+	案例名称sql.pc
+	1.实现循环菜单的功能
+	    while（1）
+		{
+		    switch （option）{
+			    case 1：
+			    ... ...
+			    breaker；	
+			}
+		}
+
