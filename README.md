@@ -1004,4 +1004,299 @@ Table s_emp first_name: Carmen
 			    breaker；	
 			}
 		}
+定长字符串和变长字符串
+  char  name[n] = {0} 
+  varchar name[n] = {0};
+  struct 
+  {
+	unsigned short len;
+	unsigned char arr[n];
+  } name;
 
+  预编译选项：
+    char_map = charz
+		varchar2|charf
+		string
+
+  数组变量使用的注意事项：
+    1）在SQL语句中使用宿主变量 最好加 ：
+    2）ddl不能使用宿主变量
+    3）可以使用指针，单是不推荐
+    4）宿主变量的声明最好放入声明区
+
+1.1使用plsql语法
+    exec sql execute
+	begin
+	  /* 相当于plsql的匿名块*/
+	end;
+    end-exec;
+
+    在预编译是，需要添加连个预编译选项：
+	sqlcheck=semantics
+	userid=用户名/密码
+    在预编译时，需要连接数据库，检查调用的存储过程、函数等是否存在以及可用。
+
+1.2在proc中调用纯粹过程，传入两个数字，然后把两个数之和存入第二个参数。
+
+    create procedure getsum_c(x number, y in out number) as 
+    begin
+	y := x + y;
+    end;
+    /
+
+    测试：
+	declare
+	   var_x number := 3;
+	   var_y number := 4;
+	begin
+	   dbms_output.put_line(var_x);
+	   getsum_c(var_x, var_y);
+	   dbms_output.put_line(var_y);
+	end;
+	/
+
+#include <stdio.h>
+
+exec sql include sqlca;
+
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "system/open123";
+		int a = 10;
+		int b = 12;
+	exec sql end declare section;
+	exec sql connect:pw;
+	exec sql execute 
+		begin 
+			getsum_c(:a, :b);
+		end;
+	end-exec;
+	exec sql commit work release;
+	printf("%d\n", b);
+	return 0;
+}
+
+proc one.pc SQLCHECK=SEMANTICS userid=system/open123 
+gcc one.c -lclntsh
+
+create or replace function fun_aaaa (x number, y number, z in out number )  return number as
+begin
+  if x > y then
+  	z := x;
+	return z;
+  else
+  	z := y;
+	return z;
+  end if;
+end;
+/
+
+declare
+  x number := 10;
+  y number := 20;
+  z number := 15;
+begin
+  z:= fun_aaaa(x, y, z);
+  dbms_output.put_line(z);
+  dbms_output.put_line('hello');
+end;
+/
+
+2.数据库连接
+    本地数据库连接
+	应用程序和数据库在同一个台电脑上
+	exec sql connect: 用户名/密码；
+	exec sql connect：用户名 identified by :密码；
+    远程数据库连接
+	需要提供一个描述，描述远端的数据库，包括：ip地址、端口号、Oracle数据库的服务id(服务名）
+	程序员可以自己写，有固定的格式
+	为了编程方便，在$oracle_home/admin/tnsname.ora文件进行了配置可以直接使用，或者按照格式更改。
+	$oracle_home:环境变量 oracle的安装目录
+	echo $oracle_home
+	echo $oracle_sid oracle的服务名
+	默认端口号：1521
+
+	定义一个char型数组，保存远程连接的描述字符串，在连接数据库时，使用using引入远程描述字符串：
+	exec sql connect ：用户名/密码 using ：描述字符串；
+
+#include <stdio.h>
+exec sql include sqlca;
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "openlab/open123";
+		char name[25];
+		char rbddesc[20]="DB20"; --远程连接
+	exec sql end declare section;
+	exec sql connect :pw using :rbddesc;
+	exec sql select first_name into :name from s_emp where id = 1;
+	exec sql commit work release;
+	printf("%s\n", name);
+	return 0;
+}
+
+多个数据库，可以通过定义标签，然后在使用时用标签标示访问的是哪个数据库。
+	at :标签名
+
+#include <stdio.h>
+exec sql include sqlca;
+int main ()
+{
+	exec sql begin declare section;
+		char pw1[] = "openlab/open123";
+		char name1[25];
+		/*declare lable*/
+		char lable1[10] = "A";
+		char rbddesc1[20]="DB20";
+	exec sql end declare section;
+	exec sql connect :pw1 at: lable1;//using :rbddesc;
+	exec sql at: lable1 select first_name into :name1 from s_emp where id = 1;
+	exec sql at: lable1 commit work release;
+	printf("A:%s\n", name1);
+
+	exec sql begin declare section;
+		char pw[] = "openlab/open123";
+		char name[25];
+		char lable[10] = "B";
+		char rbddesc[20]="DB20";
+	exec sql end declare section;
+	exec sql connect :pw at:lable; //using :rbddesc;
+	exec sql at: lable select first_name into :name from s_emp where id = 1;
+	exec sql at: lable commit work release;
+	printf("B:%s\n", name);
+	return 0;
+}
+
+proc中错误处理
+    局部的错误处理：sqlca.sqlcode来判断sql语句的执行状态。
+    全局的错误处理：错误的处理致谢一次，出现同类型的错误时，可以自动查找并执行错误处理方式。
+    语法：
+	exec sql  whenever 条件 动作；
+	条件就只错误的方式，动作就是出现错误后的错误处理方案。
+	条件包括三种：
+	    not
+	    sqlerror --sql语句错误
+	    notfound --没有找到数据
+ 	    sqlwarning --语句出现警告（不常用）
+	动作包括：
+	    do 错误处理函数（） ---条件发生后，调用错误处理函数。
+	    do break;		---条件发生后，退出循环。
+	    continue；		---据需运行
+	    stop；		---执行停止
+	    goto  标签		---跳转到某个位置（）
+	proc 中对默认错误处理是忽略的。
+	如果代码中sql出现错误（sqlerror、notfound、sqlwarning）向上查找对应的whenever语句，并执行错误处理方案。如果没有找到，继续之心后面的代码。
+	如果一点代码中写有多个对同一错误方式的处理方案，每个错误处理方案的作用区域是冲改行代码开始，到下一个同一错误方式之间的代码。
+	
+4.proc中数据处理
+  1）单行单列的查询，使用宿主变量
+	exec sql select first_name into:name from s_emp where id = 1;
+  2）单行多列的查询，使用多个宿主变量或结构体变量
+	exec sql select id,first_name,salary into :id,:name,:salary from s_emp where id = 1;
+	使用结构体变量接受单行多列的结果集
+#include <stdio.h>
+exec sql include sqlca;
+struct 
+{
+	int id;
+	char name[25];
+	double sal;
+} e;
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "system/open123";
+	exec sql end declare section;
+	exec sql connect:pw;
+	exec sql select id, first_name, salary into :e.id, :e.name, :e.sal from s_emp where id = 1;
+	exec sql commit work release;
+	printf("%d %s %g\n", e.id, e.name, e.sal);
+	return 0;
+}
+	
+1 Carmen                   2500
+
+  3）多行单列的查询，使用数组变量
+	exec sql first_name into：names from s_emp;
+  4）多行多列的查询，使用多个数组或结构体数组或游标
+	结构体数组：
+	#include <stdio.h>
+exec sql include sqlca;
+
+struct emp 
+{
+	int id;
+	char name[25];
+	double sal;
+} ;
+
+int main ()
+{
+	exec sql begin declare section;
+		char pw[] = "system/open123";
+		struct emp e[50];
+	exec sql end declare section;
+	exec sql connect:pw;
+	exec sql select id, first_name, salary into e from s_emp;
+	exec sql commit work release;
+	int i = 0;
+	for (; i < sqlca.sqlerrd[2]; i++)
+	{
+		printf("%d %s %g\n", e[i].id, e[i].name, e[i].sal);
+	}
+	printf("sqlca.sqlerrd:%d\n", sqlca.sqlerrd[2]);
+	return 0;
+}
+	使用游标
+	1）声明游标
+	  exec sql declare 游标名 cursor for select语句；
+	2）打开游标
+	  exec sql open 游标名；
+	3）提取数据
+	  exec sql fetch  游标名 into :宿主变量；
+	4）关闭游标
+	  exec sql close  游标名；
+	游标提取数据用到循环方式，退出方式：
+	  exec sql whenever notfound do break;
+#include <stdio.h>
+exec sql include sqlca;
+struct emp 
+{
+	int id;
+	char name[25];
+	double sal;
+} ;
+int main ()
+{
+	exec sql begin declare section;
+	char pw[] = "system/open123";
+	struct emp e;
+	exec sql end declare section;
+	exec sql connect:pw;
+	exec sql declare empcursor cursor for select id, first_name, salary from s_emp;
+	exec sql open empcursor;
+	exec sql whenever notfound do break;
+	for (;;)
+	{
+		exec sql fetch empcursor into :e;
+		printf("%d %s %g\n", e.id, e.name, e.sal);
+	}
+	exec sql close empcursor;
+	exec sql commit work release;
+	return 0;
+}
+	有一种特殊的邮包叫做滚动游标，滚动游标可以直接跳到结果集的任何位置。
+	滚动游标和顺序游标有两个区别：
+	1）声明是，滚动游标的关键字 scroll cursor
+	exec sql declare 游标名 scroll cursor for  select 语句；
+	2）fetch 是，滚动游标有多种方式：
+	fetch first 		---提取第一行
+	fetch last		---提取最后一行
+	fetch next 		---提取下一行数据
+	fetch prior		---提取上一行数据
+	fetch absolute n	---提取n行
+	fetch relative n 	---提取（若n=N当前行向下数第N行），若n=-N提取当前行向上N行。
+	fetch current 		---提取当前行
+eg:
+	exec sql fetch absolute 5游标名 into :宿主变量；
